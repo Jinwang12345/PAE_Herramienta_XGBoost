@@ -70,3 +70,5 @@ feature_importance_engraving.txt
 agent-teams-lite/
 gentle-ai/
 engram/
+*.txt
+*.md
