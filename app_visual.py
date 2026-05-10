@@ -5,19 +5,25 @@ import joblib
 import json
 import os
 import plotly.graph_objects as go
-from data_loader import load_and_consolidate, CSV_DASHBOARD_PATH
+from data_loader import load_and_consolidate, CSV_TRAIN_PATH
 from train_model import select_features, MODEL_PATH
+from pricing_optimizer import run_optimization_sweep, set_sim_categorical
 
 FEATURES_PATH = "model_features.json"
 
 st.set_page_config(
-    page_title="Camp Nou Dynamic Pricing",
-    page_icon="📊",
+    page_title="FCB Pricing Dinámico",
+    page_icon="🔵🔴",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# ─── OPTIMIZED CSS (FCB THEME + GLASSMORPHISM) ────────────────────────────────
+# ... (CSS styles omitted for brevity, keeping them as they are)
+# I'll just replace the logic part to keep it clean.
+# WAIT, the instructions say to replace a single contiguous block.
+# Let's target the selection logic.
+
+# ─── ESTILOS CSS OPTIMIZADOS (TEMA FCB + GLASSMORPHISM) ─────────────────────────
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap');
@@ -31,41 +37,54 @@ st.markdown("""
         color: white;
     }
     
-    div[data-testid="stMetricValue"] {
-        font-size: 1.8rem;
-        font-weight: 600;
-        color: #ffed00;
+    /* Estilo para las métricas de Streamlit */
+    [data-testid="stMetricValue"] {
+        font-size: 2rem !important;
+        font-weight: 700 !important;
+        color: #ffed00 !important;
     }
     
+    [data-testid="stMetricDelta"] {
+        color: #00ff00 !important;
+    }
+
     .glass-card {
         background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
+        backdrop-filter: blur(12px);
         border-radius: 15px;
-        padding: 20px;
+        padding: 25px;
         border: 1px solid rgba(255, 255, 255, 0.2);
         margin-bottom: 20px;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
     }
     
     h1, h2, h3 {
         color: white !important;
+        font-weight: 600 !important;
     }
     
     .stButton>button {
         background-color: #ffed00 !important;
         color: #004d98 !important;
         font-weight: 600 !important;
-        border-radius: 10px !important;
+        border-radius: 12px !important;
         border: none !important;
-        transition: transform 0.2s ease;
+        padding: 10px 24px !important;
+        transition: all 0.3s ease;
     }
     
     .stButton>button:hover {
-        transform: scale(1.05);
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(255, 237, 0, 0.4);
+    }
+
+    .sidebar .sidebar-content {
+        background-color: rgba(0, 77, 152, 0.9) !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# ─── HELPER FUNCTIONS ────────────────────────────────────────────────────────
+# ─── FUNCIONES AUXILIARES ────────────────────────────────────────────────────────
 
 @st.cache_resource
 def load_assets():
@@ -76,169 +95,158 @@ def load_assets():
         features = json.load(f)
     return model, features
 
-def run_optimization(model, features, context_row, price_range):
-    base_p = float(context_row["base_price"])
-    horizon = float(context_row["horizon_days"])
-    
-    # Calcular coeficiente de elasticidad dinámico basado en las condiciones
-    occ = float(context_row.get('occupancy_rate', 0.5))
-    days = float(context_row.get('days_to_match', 30))
-    
-    # E base: 2.5 (Demanda muy elástica). 
-    # A mayor ocupación, menor elasticidad (más rígido, la gente paga más).
-    E = 2.8 - (occ * 1.8)
-    if days < 7:
-        E -= 0.5 # Cerca del partido, los fans están más desesperados (inelástico)
-        
-    E = max(0.1, E) # Seguridad matemática
-    
-    sweep_results = []
-    for price in price_range:
-        temp_row = context_row.copy()
-        temp_row["current_price"] = price
-        temp_row["price_vs_base"] = price / base_p
-        
-        input_df = pd.DataFrame([temp_row])
-        X = select_features(input_df)
-        X = X.reindex(columns=features, fill_value=0)
-        
-        # 1. Obtenemos la tasa base general que predice el AI
-        base_rate = max(0, model.predict(X)[0])
-        
-        # 2. Inyectamos la Elasticidad Dinámica
-        price_ratio = price / base_p
-        elasticity_factor = 1.0 - (price_ratio - 1.0) * E 
-        
-        # 3. Calculamos la tasa final
-        rate = max(0, base_rate * elasticity_factor)
-        
-        q = rate * horizon
-        rev = price * q
-        
-        sweep_results.append({
-            "Price": price,
-            "SalesRate": rate,
-            "Revenue": rev,
-            "Demand": q
-        })
-    return pd.DataFrame(sweep_results)
+# run_optimization eliminada - ahora se usa pricing_optimizer.run_optimization_sweep
 
-# ─── SIDEBAR (CONTROL PANEL) ──────────────────────────────────────────────────
+# ─── BARRA LATERAL (PANEL DE CONTROL) ──────────────────────────────────────────
 
 with st.sidebar:
-    st.image("https://www.fcbarcelona.com/fcbarcelona/photo/2018/10/01/21626601-26dd-4d7a-ba92-70b12bc85496/FCB_Logo.png", width=100)
-    st.title("Admin Console")
+    st.image("https://www.fcbarcelona.com/fcbarcelona/photo/2018/10/01/21626601-26dd-4d7a-ba92-70b12bc85496/FCB_Logo.png", width=120)
+    st.title("Consola de Gestión")
     st.markdown("---")
     
-    uploaded_file = st.file_uploader("Actualizar Template (CSV)", type=["csv"])
-    
-    st.subheader("Model Settings")
-    auto_refresh = st.checkbox("Live Optimization", value=True)
-    confidence_threshold = st.slider("Confidence Buffer", 0.0, 0.2, 0.05)
+    st.subheader("Estado del Sistema")
+    st.success("✅ Modelo v2: Realista Activo")
+    st.info("Utilizando el dataset de precios ajustados y optimizados por sección.")
 
-# ─── MAIN CONTENT ──────────────────────────────────────────────────────────────
+# ─── CONTENIDO PRINCIPAL ────────────────────────────────────────────────────────
 
-st.title("📊 Camp Nou: Dynamic Pricing Dashboard")
-st.markdown("Real-time revenue optimization engine for FC Barcelona Matchday tickets.")
+st.title("📊 Camp Nou: Inteligencia de Pricing Dinámico")
+st.markdown("Motor de optimización de ingresos de élite para el FC Barcelona.")
 
 model, model_features = load_assets()
 
 if not model or not model_features:
-    st.error("Model assets not found. Please run the training pipeline first.")
+    st.error("Activos del modelo no encontrados. Por favor, ejecuta el entrenamiento primero.")
     st.stop()
 
-# Data Loading
-df = load_and_consolidate(CSV_DASHBOARD_PATH) if not uploaded_file else pd.read_csv(uploaded_file, sep=";")
+# Carga de Datos (Dataset Maestro Completo 'Realistas')
+df = load_and_consolidate(CSV_TRAIN_PATH) 
 
 if df is not None:
-    # Match Selector logic
-    if "match_name" not in df.columns:
-        df["match_name"] = "FC Barcelona vs " + df["opponent"].astype(str)
+    # ─── SELECTOR DE UBICACIÓN (NUEVA ESTRUCTURA LIMPIA) ───
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    c_sel1, c_sel2 = st.columns(2)
     
-    selected_sector = st.selectbox("Select Sector Context", df["sector_name"].unique())
-    row = df[df["sector_name"] == selected_sector].iloc[0].copy()
-
-    col_m1, col_m2, col_m3 = st.columns(3)
+    with c_sel1:
+        available_areas = sorted(df["item_area"].unique())
+        selected_area = st.selectbox("1. Zona", available_areas, index=2) # Default Gol Nord
     
-    with col_m1:
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.metric("Base Price", f"€{row['base_price']:.2f}")
-        st.markdown('</div>', unsafe_allow_html=True)
+    with c_sel2:
+        levels_in_area = sorted(df[df["item_area"] == selected_area]["item_level"].unique(), key=lambda x: int(x))
+        selected_level = st.selectbox("2. Nivel", levels_in_area, index=0)
     
-    with col_m2:
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.write("Match Context")
-        st.write(f"**Opponent:** {row['opponent']}")
-        st.write(f"**Ranking:** {row['opponent_ranking']}")
-        st.markdown('</div>', unsafe_allow_html=True)
+    # Extraer fila de referencia
+    row = df[(df["item_area"] == selected_area) & (df["item_level"] == selected_level)].iloc[0].copy()
+    
+    # Mostrar solo la información esencial de ubicación en una línea
+    st.markdown(f"📍 **Ubicación:** {row['sector_name']}  |  💰 **Precio Base Sector:** €{row['base_price']:.2f}")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    with col_m3:
-        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.write("Current State")
-        st.write(f"**Days to Match:** {row['days_to_match']}")
-        st.write(f"**Occupancy:** {row['occupancy_rate']*100:.1f}%")
-        st.markdown('</div>', unsafe_allow_html=True)
+    st.subheader("🔥 Simulador de Escenarios")
+    
+    # 1. Selección de Torneo (Al principio)
+    st.markdown("##### 🏆 Contexto de Competición")
+    c_ctx1, c_ctx2 = st.columns(2)
+    with c_ctx1:
+        sim_comp = st.selectbox("Competición", ["LaLiga", "Champions_League", "Copa_del_Rey", "Supercopa", "Friendly"], index=0)
+    with c_ctx2:
+        # Fases disponibles en el dataset
+        phases = ["Regular_Season", "League_Phase", "Round_of_32", "Round_of_16", "Quarterfinal", "Semifinal", "Final", "Playoff", "Mid_season", "Pre_season", "Summer_Tour"]
+        if sim_comp == "LaLiga":
+            sim_phase = st.selectbox("Fase Actual", ["Regular_Season", "Mid_season"], index=0)
+        elif sim_comp == "Champions_League":
+            sim_phase = st.selectbox("Fase Actual", ["League_Phase", "Round_of_16", "Quarterfinal", "Semifinal", "Final"], index=0)
+        else:
+            sim_phase = st.selectbox("Fase Actual", phases, index=0)
 
-    # Sliders for real-time simulation
+    # 2. Otros Parámetros
+    st.markdown("##### ⚙️ Parámetros de Simulación")
+    s_c1, s_c2, s_c3 = st.columns(3)
+    
+    with s_c1:
+        sim_days = st.slider("Días para el partido", 1, 150, 30)
+        sim_occ = st.slider("Ocupación Proyectada (%)", 0.0, 0.99, 0.45)
+
+    with s_c2:
+        sim_imp = st.slider("Importancia Match", 1, 10, 7)
+        sim_hour = st.slider("Hora Inicio", 12, 23, 21)
+
+    with s_c3:
+        sim_derby = st.checkbox("¿Es un Derbi?", value=False)
+        sim_fest = st.checkbox("Festivo / Vacacional", value=False)
+
     st.markdown("---")
-    st.subheader("Simulate Market Conditions")
-    c1, c2, c3 = st.columns(3)
-    sim_days = c1.slider("Days to Match", 0, 180, int(row['days_to_match']))
-    sim_occ = c2.slider("Simulated Occupancy", 0.0, 1.0, float(row['occupancy_rate']))
-    sim_vel = c3.slider("Sales Velocity", 0.0, 1.0, float(row.get('sales_velocity', 0.1)))
 
+    # ─── INYECCIÓN DE VALORES Y OPTIMIZACIÓN ───
     row['days_to_match'] = sim_days
     row['occupancy_rate'] = sim_occ
-    row['sales_velocity'] = sim_vel
+    row['match_importance'] = sim_imp
+    row['kickoff_hour'] = sim_hour
+    row['is_derby'] = sim_derby
+    row['is_holiday_period'] = sim_fest
+    
+    # Aplicar codificación categórica para la simulación
+    row = set_sim_categorical(row, "competition_type", sim_comp)
+    row = set_sim_categorical(row, "competition_phase", sim_phase)
 
-    # Run Optimization Sweep
-    price_range = np.linspace(float(row['base_price']) * 0.5, float(row['base_price']) * 1.5, 40)
-    sweep_df = run_optimization(model, model_features, row, price_range)
-    
-    optimal_row = sweep_df.loc[sweep_df["Revenue"].idxmax()]
-    current_price = float(row.get("current_price", row["base_price"]))
-    
-    # ─── RESULTS METRICS ───
-    st.markdown("---")
-    res_c1, res_c2, res_c3, res_c4 = st.columns(4)
-    res_c1.metric("Optimal Price", f"€{optimal_row['Price']:.2f}", 
-                  f"{((optimal_row['Price']/row['base_price'])-1)*100:+.1f}% vs Base")
-    res_c2.metric("Projected Revenue", f"€{optimal_row['Revenue']:,.2f}")
-    res_c3.metric("Projected Sales Rate", f"{optimal_row['SalesRate']:.2f} tix/day")
-    res_c4.metric("Total Projected Demand", f"{optimal_row['Demand']:.0f} units")
+    # Ejecutar Optimización centralizada
+    base_p_sector = float(row['base_price'])
+    p_range = np.linspace(base_p_sector * 0.4, base_p_sector * 2.8, 70)
+    sweep_df, optimal, raw_ai_rate = run_optimization_sweep(model, model_features, row, p_range)
 
-    # ─── CHARTS (PLOTLY) ───
-    st.markdown("### Optimization Analytics")
-    chart_c1, chart_c2 = st.columns(2)
+    # ─── RESULTADOS DE OPTIMIZACIÓN ───
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    c_res1, c_res2, c_res3 = st.columns([2, 1, 1])
     
-    # Revenue Chart
+    with c_res1:
+        st.subheader("💡 Precio Óptimo Recomendado")
+        st.markdown(f"<h1 style='color: #ffed00; font-size: 4.5rem; margin: 0;'>€{optimal['Precio']:.2f}</h1>", unsafe_allow_html=True)
+        st.markdown(f"**Variación:** {optimal['vsBase']:+.1f}% sobre el precio base")
+    
+    with c_res2:
+        st.metric("Elasticidad (E)", f"{optimal['Elasticidad']:.2f}", 
+                  delta=f"{(2.5 - optimal['Elasticidad']):.2f}", delta_color="normal",
+                  help="Menor elasticidad significa mercado más rígido (puedes subir el precio sin perder tanta demanda).")
+        st.metric("Demanda Est.", f"{optimal['Demanda']:.1f} tix", 
+                  help="Entradas proyectadas a vender en el horizonte de tiempo.")
+
+    with c_res3:
+        # Calcular ingresos vs base para el delta
+        base_rev = base_p_sector * raw_ai_rate * 15 # aproximado
+        rev_uplift = ((optimal['Ingresos'] / base_rev) - 1) * 100 if base_rev > 0 else 0
+        st.metric("Potencial Ingresos", f"€{optimal['Ingresos']:,.0f}", f"{rev_uplift:+.1f}%")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ─── GRÁFICO DE MAXIMIZACIÓN ───
+    st.markdown("### Curva de Maximización de Ingresos")
     fig_rev = go.Figure()
-    fig_rev.add_trace(go.Scatter(x=sweep_df["Price"], y=sweep_df["Revenue"], 
-                                mode='lines+markers', name='Projected Revenue',
-                                line=dict(color='#ffed00', width=3)))
-    fig_rev.add_vline(x=optimal_row["Price"], line_dash="dash", line_color="white", 
-                      annotation_text="Optimal Price")
-    fig_rev.update_layout(title="Revenue vs Price Curve", 
-                          xaxis_title="Simulation Price (€)", 
-                          yaxis_title="Expected Revenue (€)",
+    
+    # Curva de Ingresos
+    fig_rev.add_trace(go.Scatter(x=sweep_df["Precio"], y=sweep_df["Ingresos"], 
+                                mode='lines', name='Ingresos Est.',
+                                line=dict(color='#ffed00', width=4),
+                                fill='tozeroy', fillcolor='rgba(255, 237, 0, 0.1)'))
+    
+    # Línea de Precio Óptimo
+    fig_rev.add_vline(x=optimal["Precio"], line_dash="dash", line_color="#00ff00", 
+                      annotation_text=f"ÓPTIMO: €{optimal['Precio']:.2f}", 
+                      annotation_position="top right")
+    
+    # Línea de Precio Base
+    fig_rev.add_vline(x=base_p_sector, line_dash="dot", line_color="rgba(255,255,255,0.5)", 
+                      annotation_text="BASE", annotation_position="bottom left")
+
+    fig_rev.update_layout(xaxis_title="Precio (€)", yaxis_title="Ingresos Estimados (€)",
                           paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                          font=dict(color="white"))
-    chart_c1.plotly_chart(fig_rev, use_container_width=True)
+                          font=dict(color="white", family="Outfit"),
+                          hovermode="x unified",
+                          margin=dict(l=0, r=0, t=30, b=0),
+                          height=450)
+    st.plotly_chart(fig_rev, use_container_width=True)
 
-    # Sales Rate Chart
-    fig_rate = go.Figure()
-    fig_rate.add_trace(go.Scatter(x=sweep_df["Price"], y=sweep_df["SalesRate"], 
-                                 line=dict(color='#00ff00', dash='dot'), 
-                                 name='Sales Rate'))
-    fig_rate.update_layout(title="Predicted Sales Rate Decay", 
-                           xaxis_title="Simulation Price (€)", 
-                           yaxis_title="Expected Sales Rate (units/day)",
-                           paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                           font=dict(color="white"))
-    chart_c2.plotly_chart(fig_rate, use_container_width=True)
+    with st.expander("🔎 Ver detalle técnico de optimización"):
+        st.dataframe(sweep_df.style.background_gradient(subset=['Ingresos'], cmap='YlGn'), use_container_width=True)
 
-    st.markdown("---")
-    with st.expander("Show Raw Optimization Table"):
-        st.dataframe(sweep_df.style.highlight_max(axis=0, subset=['Revenue']))
 else:
-    st.info("Please load a data file or template to begin analysis.")
+    st.error("Error crítico: No se pudo cargar el dataset realista.")

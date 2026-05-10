@@ -7,8 +7,10 @@ from joblib import load
 
 from data_loader import load_and_consolidate
 from train_model import select_features
+from pricing_optimizer import run_optimization_sweep
 
-MODEL_PATH = "xgb_current_price_model.pkl"
+MODEL_PATH = "xgb_sales_rate_model.pkl"
+import numpy as np
 
 app = FastAPI(title="CampNou Pricing API", version="1.0")
 
@@ -21,17 +23,21 @@ class PredictRequest(BaseModel):
     match_id: int
     sector_id: int
     days_to_match: int
-    occupancy_rate: float = Field(..., ge=0.0, le=1.0)
+    occupancy_rate: float = Field(0.5, ge=0.0, le=1.0)
+    match_importance: int = Field(7, ge=1, le=10)
+    competition_type: str = Field("LaLiga")
+    competition_phase: str = Field("Regular Season")
+    is_derby: bool = Field(False)
+    is_holiday_period: bool = Field(False)
 
 
 class PredictResponse(BaseModel):
     match_id: int
     sector_id: int
-    predicted_price: float
-    suggested_price: float
     base_price: float
-    predicted_revenue_potential: Optional[float]
-    rule_applied: str
+    xgboost_raw_prediction: float
+    suggested_optimal_price: float
+    expected_revenue: float
     message: str
 
 
@@ -64,57 +70,34 @@ def predict_price(req: PredictRequest):
     if match_sector_key not in static_data.index:
         raise HTTPException(status_code=404, detail="Combinación Match/Sector no encontrada")
 
-    static_row = static_data.loc[match_sector_key]
-    if isinstance(static_row, pd.DataFrame):
-        static_row = static_row.iloc[0]
+    static_row = static_row.iloc[0].copy()
 
-    base_price = float(static_row["base_price"])
-    opponent_ranking = int(static_row["opponent_ranking"])
-    city_event = static_row.get("city_event", "No Event")
+    # Inyectar valores de la petición en la fila estática para construir el contexto
+    static_row['days_to_match'] = req.days_to_match
+    static_row['occupancy_rate'] = req.occupancy_rate
+    static_row['match_importance'] = req.match_importance
+    static_row['competition_type'] = req.competition_type
+    static_row['competition_phase'] = req.competition_phase
+    static_row['is_derby'] = req.is_derby
+    static_row['is_holiday_period'] = req.is_holiday_period
 
-    # Payload -> DataFrame
-    raw = pd.DataFrame([
-        {
-            "days_to_match": req.days_to_match,
-            "opponent_ranking": opponent_ranking,
-            "base_price": base_price,
-            "occupancy_rate": req.occupancy_rate,
-            "city_event": city_event,
-            "sales_velocity": static_row.get("sales_velocity", 0.0),
-            "revenue_potential": static_row.get("revenue_potential", 0.0),
-        }
-    ])
+    # Rango de barrido para optimización (ej: desde 50% hasta 250% del precio base)
+    base_p = float(static_row["base_price"])
+    p_range = np.linspace(base_p * 0.5, base_p * 2.5, 50)
 
-    print("[predict_price] raw dataframe columns:", raw.columns.tolist())
-
-    # Usar la misma función de selección de features del entrenamiento
-    X = select_features(raw)
-    print("[predict_price] after select_features columns:", X.columns.tolist())
-
-    # Forzar orden y llenar cualquier columna faltante esperada por el modelo
-    X = X.reindex(columns=reference_features, fill_value=0.0)
-    print("[predict_price] final feature matrix columns:", X.columns.tolist())
-
-    print("[predict_price] input X:\n", X)
-
-    pred_price = float(model.predict(X)[0])
-
-    suggested_price = max(pred_price, base_price)
-    rule_applied = "Ajuste aplicado: no sugerir precio menor al base_price." if suggested_price > pred_price else "No adjustment needed"
-
-    predicted_revenue_potential = None
-    if pd.notna(static_row.get("tickets_sold")):
-        predicted_revenue_potential = suggested_price * float(static_row.get("tickets_sold", 0.0))
+    # Llamada al motor centralizado de optimización
+    sweep_df, optimal, raw_ai_rate = run_optimization_sweep(
+        model, reference_features, static_row, p_range
+    )
 
     return PredictResponse(
         match_id=req.match_id,
         sector_id=req.sector_id,
-        predicted_price=round(pred_price, 2),
-        suggested_price=round(suggested_price, 2),
-        base_price=round(base_price, 2),
-        predicted_revenue_potential=round(predicted_revenue_potential, 2) if predicted_revenue_potential is not None else None,
-        rule_applied=rule_applied,
-        message="Predicción completada con éxito",
+        base_price=round(base_p, 2),
+        xgboost_raw_prediction=round(raw_ai_rate, 2),
+        suggested_optimal_price=round(optimal["Precio"], 2),
+        expected_revenue=round(optimal["Ingresos"], 2),
+        message="Optimización de precio completada con éxito",
     )
 
 

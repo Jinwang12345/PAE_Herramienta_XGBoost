@@ -45,30 +45,25 @@ ENV/
 env.bak/
 venv.bak/
 
-# Data Files (Evitar subir datasets grandes o sensibles)
+# Data Files (Evitar subir datasets grandes)
 *.csv
 *.xlsx
 *.xls
-*.json
-# Se puede descomentar json si hay configuraciones que s deban subir, pero por ahora suele ser generado
+!FCB_DASHBOARD_INPUT_TEMPLATE_excel_es.csv
 
-# Documentacin o archivos binarios/grandes
+# Permitir archivos de configuración y modelos necesarios
+!model_features.json
+!*.pkl
+
+# Documentación y otros
 *.pdf
+!README.md
+!requirements.txt
 
-# Modelos Entrenados (Evitar subir archivos binarios pesados de ML)
-*.pkl
-*.model
-*.h5
-*.pb
-*.onnx
-
-# Especfico del proyecto local
+# Específico del proyecto local
 .engram/
 .skills/
 spec_output.txt
 feature_importance_engraving.txt
-agent-teams-lite/
-gentle-ai/
-engram/
-*.txt
-*.md
+__pycache__/
+*.py[cod]
