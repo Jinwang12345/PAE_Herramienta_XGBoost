@@ -1,37 +1,61 @@
-# 📊 FC Barcelona: Motor de Pricing Dinámico
+# PAE Herramienta XGBoost
 
-Este repositorio contiene la herramienta de optimización de precios para el FC Barcelona, basada en modelos de Machine Learning (XGBoost) para predecir la demanda y maximizar los ingresos por sección del Camp Nou.
+Este repositorio contiene una herramienta de simulación de pricing dinámico para entradas deportivas basada en un modelo de Machine Learning (XGBoost). El proyecto se divide en dos partes principales: un backend en Python (FastAPI) y un frontend interactivo en React.
 
-## 🚀 Cómo empezar
+El sistema incorpora variables avanzadas de neuromarketing (presión temporal, FOMO, exclusividad, etc.) para estimar las ventas y determinar el precio óptimo para cada sector.
 
-Para ejecutar la herramienta en tu ordenador local, sigue estos pasos:
+## Requisitos
 
-### 1. Requisitos previos
-Asegúrate de tener instalado Python 3.8 o superior. Se recomienda usar un entorno virtual.
-
-### 2. Instalación de dependencias
-Instala las librerías necesarias ejecutando:
-```bash
-pip install -r requirements.txt
-```
-
-### 3. Ejecutar la Aplicación Visual (Streamlit)
-La forma más sencilla de probar la herramienta es a través del dashboard interactivo:
-```bash
-streamlit run app_visual.py
-```
-
-## 📂 Estructura del Proyecto
-
-- `app_visual.py`: Dashboard interactivo (Streamlit) para simular escenarios y ver el precio óptimo.
-- `pricing_optimizer.py`: Motor de cálculo que realiza el "sweep" de precios y encuentra el máximo de ingresos.
-- `train_model.py`: Script para entrenar el modelo XGBoost desde cero.
-- `data_loader.py`: Funciones para cargar y consolidar los datasets del proyecto.
-- `xgb_sales_rate_model.pkl`: El modelo ya entrenado listo para usar.
-- `model_features.json`: Configuración de las variables que el modelo necesita.
-
-## ⚠️ Nota sobre los Datasets
-Los archivos de datos de gran tamaño (`.csv` de más de 100MB) no están incluidos en este repositorio por límites de GitHub. Para que la herramienta funcione completamente, asegúrate de tener los archivos `dataset_v2_XGBOOST_encoded.csv` y `dataset_v2_EQUIPO.csv` en la carpeta raíz.
+- Python 3.9 o superior
+- Node.js (y npm)
 
 ---
-**Desarrollado para la optimización de ingresos del FCB.** 🔵🔴
+
+## 1. Arrancar el Backend (Python / FastAPI)
+
+El backend expone la API y carga el modelo de XGBoost entrenado.
+
+1. Abre una terminal y navega a la carpeta principal del proyecto.
+2. (Opcional pero recomendado) Crea y activa un entorno virtual de Python.
+3. Instala las dependencias necesarias:
+   ```bash
+   pip install pandas numpy scikit-learn xgboost fastapi uvicorn joblib
+   ```
+4. Ejecuta el servidor de FastAPI:
+   ```bash
+   python main.py
+   ```
+   *El servidor se iniciará y la API estará disponible en `http://localhost:8000`.*
+
+---
+
+## 2. Arrancar el Frontend (React / Vite)
+
+El frontend contiene el Simulador interactivo que consulta la API del backend en tiempo real.
+
+1. Abre **otra terminal** y navega a la carpeta del frontend:
+   ```bash
+   cd frontend
+   ```
+2. Instala las dependencias del frontend:
+   ```bash
+   npm install
+   ```
+3. Arranca el servidor de desarrollo:
+   ```bash
+   npm run dev
+   ```
+   *El frontend estará disponible normalmente en `http://localhost:5173`. Abre esa URL en tu navegador web para utilizar el simulador interactivo.*
+
+---
+
+## Entrenamiento del Modelo (Opcional)
+
+Si necesitas reentrenar el modelo XGBoost con nuevos datos (asegúrate de tener los archivos `dataset_v2_XGBOOST_encoded_FINAL.csv` y `dataset_v2_EQUIPO_FINAL.csv` en la raíz del proyecto):
+
+1. Ejecuta el script de entrenamiento:
+   ```bash
+   python train_model.py
+   ```
+   *Esto generará un nuevo archivo `xgb_sales_rate_model.pkl` y actualizará el documento de importancia de variables (`feature_importance_engraving.txt`).*
+2. **Reinicia el servidor backend (`main.py`)** para que cargue el nuevo modelo en memoria.

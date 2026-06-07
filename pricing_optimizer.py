@@ -47,6 +47,12 @@ def run_optimization_sweep(model, features, context_row, price_range):
     context_row['urgency_score'] = match_imp
     context_row['sales_velocity'] = 0.5 + (occ * 2) # Variable muy importante (0.08)
     
+    # Variables Neuromarketing Dinámicas para el Simulador
+    context_row['fomo_index'] = min(100, max(0, 30 + (occ * 50) + (match_imp * 3) - (days * 0.2)))
+    context_row['decision_pressure_index'] = min(100, max(0, 20 + (occ * 40) + (match_imp * 2) - (days * 0.3)))
+    context_row['social_proof_index'] = min(100, max(0, 10 + (occ * 70)))
+    context_row['emotional_pull_index'] = min(100, max(0, 40 + (match_imp * 5) + (10 if is_derby else 0)))
+    
     # Ajustar niveles de escasez (One-hot encoding manual)
     context_row = set_sim_categorical(context_row, "scarcity_level", "low")
     if occ > 0.8:
@@ -73,6 +79,9 @@ def run_optimization_sweep(model, features, context_row, price_range):
     ref_row = context_row.copy()
     ref_row["current_price"] = base_p
     ref_row["price_vs_base"] = 1.0
+    ref_row["anchor_price_gap"] = 0.0
+    base_fairness = context_row.get("price_fairness_score", 50)
+    ref_row["price_fairness_score"] = min(100, max(0, base_fairness + (match_imp * 2)))
     
     X_ref = select_features(pd.DataFrame([ref_row]))
     X_ref = X_ref.reindex(columns=features, fill_value=0)
@@ -82,6 +91,8 @@ def run_optimization_sweep(model, features, context_row, price_range):
         temp_row = context_row.copy()
         temp_row["current_price"] = price
         temp_row["price_vs_base"] = price / base_p
+        temp_row["anchor_price_gap"] = ((price / base_p) - 1) * 100
+        temp_row["price_fairness_score"] = min(100, max(0, base_fairness - ((price / base_p) - 1) * 40 + (match_imp * 2)))
         
         input_df = pd.DataFrame([temp_row])
         X = select_features(input_df)

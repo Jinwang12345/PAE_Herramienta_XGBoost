@@ -248,14 +248,9 @@ const Simulator = () => {
                 <p className="text-on-surface-variant text-label-sm mt-2 max-w-sm">Basado en la elasticidad actual y la demanda proyectada para los parámetros introducidos.</p>
               </div>
               <div className="text-right">
-                <span className="text-[10px] text-on-surface-variant uppercase block mb-1">Confianza de IA</span>
-                <div className="flex gap-1 justify-end">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className={`w-8 h-1 rounded-full ${results && (i * 20) < results.ai_confidence ? 'bg-primary neon-glow-yellow' : 'bg-white/20'}`}></div>
-                  ))}
-                </div>
-                <span className="text-on-surface text-label-md font-bold mt-1 block">
-                  {results ? `${results.ai_confidence}%` : '--%'}
+                <span className="text-[10px] text-on-surface-variant uppercase block mb-1">Variación vs Base</span>
+                <span className={`text-label-md font-bold mt-3 block ${!results ? 'text-on-surface' : results.suggested_optimal_price >= results.base_price ? 'text-secondary' : 'text-error'}`}>
+                  {results ? `${results.suggested_optimal_price >= results.base_price ? '+' : ''}${(results.suggested_optimal_price - results.base_price).toFixed(2)}€ (${results.base_price > 0 ? (((results.suggested_optimal_price - results.base_price) / results.base_price) * 100).toFixed(1) : '0.0'}%)` : '--'}
                 </span>
               </div>
             </div>

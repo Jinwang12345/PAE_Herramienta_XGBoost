@@ -2,8 +2,8 @@ import pandas as pd
 import os
 
 # Nuevos datasets V2
-CSV_TRAIN_PATH = "dataset_v2_XGBOOST_encoded.csv"
-CSV_EQUIPO_PATH = "dataset_v2_EQUIPO.csv"
+CSV_TRAIN_PATH = "dataset_v2_XGBOOST_encoded_FINAL.csv"
+CSV_EQUIPO_PATH = "dataset_v2_EQUIPO_FINAL.csv"
 CSV_DASHBOARD_PATH = "FCB_DASHBOARD_INPUT_TEMPLATE_excel_es.csv"
 
 def load_and_consolidate(csv_path: str = CSV_TRAIN_PATH) -> pd.DataFrame:
