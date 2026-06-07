@@ -3,7 +3,7 @@ import axios from 'axios';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceDot } from 'recharts';
 
 const Simulator = () => {
-  const [importance, setImportance] = useState(85);
+  const [importance, setImportance] = useState(7);
   const [days, setDays] = useState(40);
   const [occupancy, setOccupancy] = useState(62);
   const [time, setTime] = useState(80);
@@ -69,7 +69,7 @@ const Simulator = () => {
         item_level: selectedLevel,
         days_to_match: parseInt(days),
         occupancy_rate: occupancy / 100,
-        match_importance: Math.ceil((importance / 100) * 10),
+        match_importance: parseInt(importance, 10),
         competition_type: selectedComp,
         competition_phase: selectedPhase,
         is_derby: isDerby,
@@ -170,9 +170,9 @@ const Simulator = () => {
                 <div className="space-y-1">
                   <div className="flex justify-between">
                     <label className="text-[10px] text-on-surface-variant uppercase font-bold">Importancia del Partido</label>
-                    <span className={`text-label-sm ${importance > 80 ? 'text-secondary' : 'text-primary'}`}>{importance}%</span>
+                    <span className={`text-label-sm ${importance > 8 ? 'text-secondary' : 'text-primary'}`}>{importance}/10</span>
                   </div>
-                  <input className="w-full" type="range" value={importance} onChange={(e) => setImportance(e.target.value)} />
+                  <input className="w-full" type="range" min="1" max="10" step="1" value={importance} onChange={(e) => setImportance(e.target.value)} />
                 </div>
                 <div className="space-y-1">
                   <div className="flex justify-between">
