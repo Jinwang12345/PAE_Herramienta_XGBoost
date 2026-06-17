@@ -26,6 +26,7 @@ app.add_middleware(
 model = None
 reference_features = None
 static_data = None
+analytics_data = None
 
 
 class PredictRequest(BaseModel):
@@ -57,7 +58,7 @@ class PredictResponse(BaseModel):
 
 @app.on_event("startup")
 def startup_event():
-    global model, reference_features, static_data
+    global model, reference_features, static_data, analytics_data
 
     try:
         model = load(MODEL_PATH)
@@ -71,6 +72,7 @@ def startup_event():
 
     # No reseteamos el index para que siga siendo un DataFrame plano para las búsquedas por area/nivel
     static_data = df
+    analytics_data = pd.read_csv("dataset_v2_EQUIPO_FINAL.csv", sep=";", decimal=",")
 
     # Construir esquema de features esperadas por el modelo
     reference_features = select_features(df).columns.tolist()
@@ -163,7 +165,72 @@ def predict_price(req: PredictRequest):
         sweep_data=sweep_data_list
     )
 
+from fastapi import Query
 
+@app.get("/api/analytics")
+def get_analytics(
+    competition: Optional[str] = Query(None),
+    sector: Optional[str] = Query(None),
+    day_type: Optional[str] = Query(None)
+):
+    if analytics_data is None:
+        raise HTTPException(status_code=500, detail="Datos no inicializados")
+        
+    df = analytics_data.copy()
+    
+    if competition and competition != "All Leagues":
+        df = df[df["competition_type"] == competition]
+        
+    if sector and sector != "All Sectors":
+        df = df[df["sector_family"] == sector]
+        
+    if day_type == "Weekend Only":
+        df = df[df["is_weekend"] == True]
+    elif day_type == "Weekdays":
+        df = df[df["is_weekend"] == False]
+        
+    # Obtener el estado final de las ventas ordenando por days_to_match y eliminando duplicados
+    df_final = df.sort_values("days_to_match", ascending=True).drop_duplicates(subset=["match_id", "sector_id"])
+    
+    total_revenue = float(df_final["revenue_so_far"].sum())
+    avg_occupancy = float(df_final["occupancy_rate"].mean()) * 100 if not df_final.empty else 0.0
+    avg_ticket_price = float(df_final["current_price"].mean()) if not df_final.empty else 0.0
+    
+    comp_perf = df_final.groupby("competition_type")["revenue_so_far"].sum().to_dict()
+    competitions_data = [{"name": str(k), "revenue": float(v)} for k, v in comp_perf.items()]
+    competitions_data = sorted(competitions_data, key=lambda x: x["revenue"], reverse=True)
+    
+    matches_df = df_final.groupby("match_id").agg({
+        "revenue_so_far": "sum",
+        "tickets_sold": "sum",
+        "opponent": "first",
+        "competition_type": "first",
+        "occupancy_rate": "mean"
+    }).reset_index()
+    
+    matches_data = []
+    for _, row in matches_df.iterrows():
+        occ = row["occupancy_rate"]
+        status = "OPTIMAL" if occ >= 0.9 else "GOOD" if occ >= 0.6 else "UNDER"
+        
+        matches_data.append({
+            "match_id": int(row["match_id"]),
+            "opponent": str(row["opponent"]),
+            "competition": str(row["competition_type"]),
+            "attendance": int(row["tickets_sold"]),
+            "revenue": float(row["revenue_so_far"]),
+            "status": status
+        })
+        
+    matches_data = sorted(matches_data, key=lambda x: x["match_id"], reverse=True)[:10] # Mostrar los últimos 10
+    
+    return {
+        "total_revenue": total_revenue,
+        "avg_occupancy": avg_occupancy,
+        "avg_ticket_price": avg_ticket_price,
+        "performance_by_competition": competitions_data,
+        "recent_matches": matches_data
+    }
 if __name__ == "__main__":
     import uvicorn
 

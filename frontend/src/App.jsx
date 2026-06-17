@@ -7,13 +7,15 @@ import Analytics from './pages/Analytics';
 function App() {
   return (
     <Router>
-      <div className="flex min-h-screen font-['Inter'] text-on-surface">
+      <div className="flex min-h-screen font-['Inter'] text-on-surface relative overflow-hidden bg-transparent">
         <Sidebar />
-        <Routes>
-          <Route path="/" element={<Navigate to="/simulator" replace />} />
-          <Route path="/simulator" element={<Simulator />} />
-          <Route path="/analytics" element={<Analytics />} />
-        </Routes>
+        <div className="relative z-10 w-full flex">
+          <Routes>
+            <Route path="/" element={<Navigate to="/simulator" replace />} />
+            <Route path="/simulator" element={<Simulator />} />
+            <Route path="/analytics" element={<Analytics />} />
+          </Routes>
+        </div>
       </div>
     </Router>
   );

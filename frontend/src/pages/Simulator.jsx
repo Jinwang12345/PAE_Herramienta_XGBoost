@@ -84,24 +84,25 @@ const Simulator = () => {
   };
 
   return (
-    <main className="ml-[260px] flex-1 min-h-screen bg-surface-dim p-8">
+    <main className="ml-[260px] flex-1 min-h-screen bg-transparent p-8">
       <header className="flex justify-between items-center mb-10">
         <div>
-          <h2 className="font-headline-lg text-headline-lg text-primary tracking-tight">Simulador de Escenarios</h2>
-          <p className="font-body-md text-label-md text-on-surface-variant">Real-time dynamic pricing modeling engine.</p>
+          <h2 className="font-headline-lg text-headline-lg text-primary tracking-tight">Simulador de Matchday</h2>
+          <p className="font-body-md text-label-md text-on-surface-variant">Motor predictivo de demanda y ticketing para estadios.</p>
         </div>
         <div className="flex gap-4">
           <button 
             onClick={runSimulation}
             disabled={loading}
-            className="px-6 py-2 bg-secondary-container text-white rounded-lg font-label-md shadow-lg neon-glow-pink hover:opacity-90 transition-all active:scale-95 disabled:opacity-50">
-            {loading ? 'Calculando...' : 'Ejecutar Simulación'}
+            className={`px-6 py-2 bg-secondary-container text-white rounded-lg font-label-md shadow-lg neon-glow-pink hover:opacity-90 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2 ${loading ? 'animate-pulse' : ''}`}>
+            {loading && <span className="material-symbols-outlined animate-spin text-sm" style={{ fontVariationSettings: "'wght' 600" }}>sync</span>}
+            {loading ? 'Calculando Escenarios...' : 'Ejecutar Simulación'}
           </button>
         </div>
       </header>
 
       <div className="grid grid-cols-12 gap-6">
-        <section className="col-span-5 space-y-6">
+        <section className="col-span-5 space-y-6 animate-fade-in-up opacity-0">
           <div className="glass-panel p-6 rounded-2xl">
             <div className="flex items-center gap-2 mb-6 text-primary-fixed">
               <span className="material-symbols-outlined">settings_input_component</span>
@@ -226,7 +227,7 @@ const Simulator = () => {
         </section>
 
         {/* Right Column: AI Recommendations & Metrics */}
-        <section className="col-span-7 space-y-6">
+        <section className={`col-span-7 space-y-6 animate-fade-in-up opacity-0 stagger-1 transition-opacity duration-300 ${loading ? 'opacity-50 animate-pulse pointer-events-none' : ''}`}>
           <div className="glass-panel p-8 rounded-2xl border-l-4 border-primary-container relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-10">
               <span className="material-symbols-outlined text-[120px]">bolt</span>
