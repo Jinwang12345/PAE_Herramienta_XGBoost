@@ -50,6 +50,8 @@ venv.bak/
 *.xlsx
 *.xls
 !FCB_DASHBOARD_INPUT_TEMPLATE_excel_es.csv
+!dataset_v2_EQUIPO_FINAL.csv
+!dataset_v2_XGBOOST_encoded_FINAL.csv
 
 # Permitir archivos de configuración y modelos necesarios
 !model_features.json
